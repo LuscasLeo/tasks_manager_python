@@ -1,0 +1,20 @@
+[tool.poetry]
+name = "tasks_manager_python"
+version = "0.0.0"
+description = "A Task Management Service for Mutiple Kinds of Scripts"
+authors = ["Lucas Silva"]
+
+[tool.poetry.dependencies]
+python = "^3.8"
+requests = "^2.27.1"
+pydantic = "^1.9.0"
+beautifulsoup4 = "^4.10.0"
+
+[tool.poetry.dev-dependencies]
+mypy = "^0.941"
+types-requests = "^2.27.14"
+autopep8 = "^1.6.0"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
