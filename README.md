@@ -71,3 +71,14 @@ A Aplicação deve gerenciar **Tarefas** e **Execuções** a para fins de segreg
       ]
   }
   ```
+
+
+## Contributing
+
+### Requerimentos
+- Poetry
+
+### Install
+```sh
+poetry install
+```
