@@ -1,5 +1,5 @@
 import json
-from logging import getLogger
+from logging import StreamHandler, getLogger
 import logging
 from typing import List
 
@@ -18,8 +18,8 @@ class SayHelloPayload(BaseModel):
 
 
 class SayHelloParser(TaskPayloadParser[SayHelloPayload]):
-    def parse(self, message: bytes) -> SayHelloPayload:
-        return SayHelloPayload(**json.loads(message))
+    def parse(self, payload: dict) -> SayHelloPayload:
+        return SayHelloPayload(**payload)
 
 class SayHelloApplication:
     def __init__(self):
@@ -27,7 +27,16 @@ class SayHelloApplication:
         self.consumer = TaskConsumer(self.parser, self.on_message)
 
         self.logger = getLogger(f'{__name__}.{self.__class__.__name__}')
-        self.logger.addHandler(self.consumer.generateLoggerHandler())
+
+
+        stream_handler = StreamHandler()
+        stream_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        stream_handler.setFormatter(stream_formatter)
+        stream_handler.setLevel(logging.DEBUG)
+
+        self.logger.addHandler(stream_handler)
+        self.logger.addHandler(self.consumer.get_logger_handler())
+
         self.logger.info('SayHelloApplication initialized')
         self.logger.setLevel(logging.DEBUG)
 

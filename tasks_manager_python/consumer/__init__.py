@@ -1,68 +1,121 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from logging import Formatter, Handler, StreamHandler, getLogger
+from dataclasses import asdict
+import json
+from logging import Formatter, Handler, getLogger
 from time import sleep
 from typing import Any, Callable, Generic, TypeVar
+from tasks_manager_python.consumer.types import TaskExecutionData, TaskExecutionRawData
+
+from tasks_manager_python.loggers import TaskExecutionLogHandler
+from tasks_manager_python.repository.task_execution import TaskExecutionLogRepository
 
 T = TypeVar('T')
 
 logger = getLogger(__name__)
 
-@dataclass
-class TaskExecutionData(Generic[T]):
-    payload: T
+
+class TaskManagementService:
+
+    def register_task_base_decode_error(self, raw_data: bytes, err: Exception) -> None:
+        logger.error(f'Error parsing task raw data: {err}')
+        logger.error(f'Raw data: {raw_data.decode()}')
+
+    def register_task_base_parse_error(self, data: dict, err: Exception) -> None:
+        logger.error(f'Error parsing task raw data: {err}')
+        logger.error(f'Data data: {data}')
+
+    def register_task_payload_parse_error(self, raw_data: TaskExecutionRawData, err: Exception) -> None:
+        logger.error(f'Error parsing task payload: {err}')
+        logger.error(f'Raw data: {asdict(raw_data)}')
+
+    def register_task_execution_error(self, task_execution_data: TaskExecutionData, err: Exception) -> None:
+        logger.error(f'Error executing task: {err}')
+        logger.error(f'Task execution data: {asdict(task_execution_data)}')
+
+    def register_task_execution_success(self, task_execution_data: TaskExecutionData) -> None:
+        logger.info(f'Task execution success: {asdict(task_execution_data)}')
+
 
 class TaskPayloadParser(ABC, Generic[T]):
     @abstractmethod
-    def parse(self, message: bytes) -> T:
+    def parse(self, payload: dict) -> T:
         raise NotImplementedError('Method parse() is not implemented')
+
 
 class TaskConsumer(Generic[T]):
 
-    def __init__(self, parser: TaskPayloadParser[T], callback: Callable[[TaskExecutionData[T]], Any]):
+    def __init__(self,
+                 parser: TaskPayloadParser[T],
+                 callback: Callable[[TaskExecutionData[T]], Any],
+                 task_execution_repository: TaskExecutionLogRepository = TaskExecutionLogRepository(),
+                 task_management_service: TaskManagementService = TaskManagementService()
+                 ):
         self.parser = parser
         self.callback = callback
+        self.task_execution_repository = task_execution_repository
+        self.task_management_service = task_management_service
+        self.logger_handler = TaskExecutionLogHandler(
+            self.task_execution_repository)
 
     def consume_messages(self):
         while True:
             with open('tasks.txt', 'rb') as file:
                 for line in file:
                     self.execute(line)
-            
+
             with open('tasks.txt', 'w') as file:
                 file.truncate()
 
             sleep(1)
-    
-    def execute(self, data: Any):
+
+    def execute(self, data: bytes):
+
         try:
-            payload = self.parser.parse(data)
+            base_data = json.loads(data)
+        except json.JSONDecodeError as err:
+            logger.exception(f'Failed to decode message: {data.decode()}', err)
+            self.task_management_service.register_task_base_decode_error(
+                data, err)
+            return
+
+        try:
+            task_execution_raw_data = TaskExecutionRawData(**base_data)
+        except TypeError as err:
+            logger.exception(f'Failed to parse message: {base_data}', err)
+            self.task_management_service.register_task_base_parse_error(
+                base_data, err)
+            return
+
+        # Parse Execution Payload
+
+        try:
+            payload = self.parser.parse(task_execution_raw_data.payload)
         except Exception as e:
             logger.exception(f'Error while parsing message: {e}', e)
+            self.task_management_service.register_task_payload_parse_error(
+                task_execution_raw_data, e)
             return
-        
-        execution_data = TaskExecutionData(payload=payload)
-        with TaskExecutionContext(execution_data) as context:
-            try:
 
-                self.callback(context.execution_data)
-            except Exception as e:
-                import traceback
-                logger.exception(f'Error executing callback: {e}')
-                logger.error(traceback.format_exc())
+        execution_data = TaskExecutionData(**{
+            **asdict(task_execution_raw_data),
+            'payload': payload
+        })
+        self.logger_handler.set_execution_data(execution_data)
+        try:
+            self.callback(execution_data)
 
-    def generateLoggerHandler(self) -> Handler:
-        stream_handler = StreamHandler()
-        formatter = Formatter('%(threadName)s: %(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        stream_handler.setFormatter(formatter)
-        return stream_handler
+            self.task_management_service.register_task_execution_success(
+                execution_data)
 
-class TaskExecutionContext(Generic[T]):
-    def __init__(self, execution_data: TaskExecutionData[T]):
-        self.execution_data = execution_data
-    
-    def __enter__(self):
-        return self
+        except Exception as e:
+            import traceback
+            logger.exception(f'Error executing callback: {e}')
+            logger.error(traceback.format_exc())
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        exc_type
+            self.task_management_service.register_task_execution_error(
+                execution_data, e)
+        finally:
+            self.logger_handler.set_execution_data(None)
+
+    def get_logger_handler(self) -> Handler:
+        return self.logger_handler
