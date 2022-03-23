@@ -1,13 +1,15 @@
+import json
 from abc import ABC, abstractmethod
 from dataclasses import asdict
-import json
-from logging import Formatter, Handler, getLogger
-from time import sleep
+from logging import Handler, getLogger
 from typing import Any, Callable, Generic, TypeVar
-from tasks_manager_python.consumer.types import TaskExecutionData, TaskExecutionRawData
+from tasks_manager_python.consumer.providers import TaskProvider
 
+from tasks_manager_python.consumer.types import (TaskExecutionData,
+                                                 TaskExecutionRawData)
 from tasks_manager_python.loggers import TaskExecutionLogHandler
-from tasks_manager_python.repository.task_execution import TaskExecutionLogRepository
+from tasks_manager_python.repository.task_execution import \
+    TaskExecutionLogRepository
 
 T = TypeVar('T')
 
@@ -47,11 +49,14 @@ class TaskConsumer(Generic[T]):
     def __init__(self,
                  parser: TaskPayloadParser[T],
                  callback: Callable[[TaskExecutionData[T]], Any],
+                 task_provider: TaskProvider = TaskProvider(),
                  task_execution_repository: TaskExecutionLogRepository = TaskExecutionLogRepository(),
                  task_management_service: TaskManagementService = TaskManagementService()
+
                  ):
         self.parser = parser
         self.callback = callback
+        self.task_provider = task_provider
         self.task_execution_repository = task_execution_repository
         self.task_management_service = task_management_service
         self.logger_handler = TaskExecutionLogHandler(
@@ -59,14 +64,11 @@ class TaskConsumer(Generic[T]):
 
     def consume_messages(self):
         while True:
-            with open('tasks.txt', 'rb') as file:
-                for line in file:
-                    self.execute(line)
-
-            with open('tasks.txt', 'w') as file:
-                file.truncate()
-
-            sleep(1)
+            try:
+                for data in self.task_provider.get_tasks():
+                    self.execute(data)
+            except Exception as e:
+                logger.exception(f'Error while consuming messages: {e}', e)
 
     def execute(self, data: bytes):
 
@@ -91,7 +93,7 @@ class TaskConsumer(Generic[T]):
         try:
             payload = self.parser.parse(task_execution_raw_data.payload)
         except Exception as e:
-            logger.exception(f'Error while parsing message: {e}', e)
+            logger.exception('Error while parsing message: %s', e)
             self.task_management_service.register_task_payload_parse_error(
                 task_execution_raw_data, e)
             return
@@ -109,7 +111,8 @@ class TaskConsumer(Generic[T]):
 
         except Exception as e:
             import traceback
-            logger.exception(f'Error executing callback: {e}')
+            logger.exception(f'Error executing callback: %s\n%s',
+                             e, traceback.format_exc())
             logger.error(traceback.format_exc())
 
             self.task_management_service.register_task_execution_error(

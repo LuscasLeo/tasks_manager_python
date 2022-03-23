@@ -14,6 +14,7 @@ beautifulsoup4 = "^4.10.0"
 mypy = "^0.941"
 types-requests = "^2.27.14"
 autopep8 = "^1.6.0"
+pika = "^1.2.0"
 
 [build-system]
 requires = ["poetry-core>=1.0.0", "setuptools>=40.8.0"]

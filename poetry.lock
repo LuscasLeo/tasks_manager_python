@@ -79,6 +79,19 @@ optional = false
 python-versions = "*"
 
 [[package]]
+name = "pika"
+version = "1.2.0"
+description = "Pika Python AMQP Client Library"
+category = "dev"
+optional = false
+python-versions = "*"
+
+[package.extras]
+gevent = ["gevent"]
+tornado = ["tornado"]
+twisted = ["twisted"]
+
+[[package]]
 name = "pycodestyle"
 version = "2.8.0"
 description = "Python style guide checker"
@@ -186,7 +199,7 @@ socks = ["PySocks (>=1.5.6,!=1.5.7,<2.0)"]
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.8"
-content-hash = "4282d408d00c8082553ce106b15128daef3bbb4871f605eda7e954c8a9e3f1f1"
+content-hash = "cfe951dee6f063de1d2d44d774f527aad8c00bec09b89b91abb1b416c9114b27"
 
 [metadata.files]
 autopep8 = [
@@ -237,6 +250,10 @@ mypy = [
 mypy-extensions = [
     {file = "mypy_extensions-0.4.3-py2.py3-none-any.whl", hash = "sha256:090fedd75945a69ae91ce1303b5824f428daf5a028d2f6ab8a299250a846f15d"},
     {file = "mypy_extensions-0.4.3.tar.gz", hash = "sha256:2d82818f5bb3e369420cb3c4060a7970edba416647068eb4c5343488a6c604a8"},
+]
+pika = [
+    {file = "pika-1.2.0-py2.py3-none-any.whl", hash = "sha256:59da6701da1aeaf7e5e93bb521cc03129867f6e54b7dd352c4b3ecb2bd7ec624"},
+    {file = "pika-1.2.0.tar.gz", hash = "sha256:f023d6ac581086b124190cb3dc81dd581a149d216fa4540ac34f9be1e3970b89"},
 ]
 pycodestyle = [
     {file = "pycodestyle-2.8.0-py2.py3-none-any.whl", hash = "sha256:720f8b39dde8b293825e7ff02c475f3077124006db4f440dcbc9a20b76548a20"},
