@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 import json
 from logging import StreamHandler, getLogger
 import logging
@@ -27,21 +28,38 @@ class SayHelloParser(TaskPayloadParser[SayHelloPayload]):
     def parse(self, payload: dict) -> SayHelloPayload:
         return SayHelloPayload(**payload)
 
+@dataclass
+class RMQConfig:
+    host: str
+    port: int
+    user: str
+    password: str
+    queue: str
 
 class SayHelloApplication:
-    def __init__(self):
+    def __init__(self, rmq_config: RMQConfig):
+        
+
         self.parser = SayHelloParser()
+
+        self.connection=pika.BlockingConnection(
+                    pika.ConnectionParameters(
+                        host=rmq_config.host,
+                        port=rmq_config.port,
+                        credentials=pika.PlainCredentials(rmq_config.user, rmq_config.password)
+                    )
+                )
+
+        self.channel = self.connection.channel()
+        self.channel.queue_declare(queue=rmq_config.queue)
+
+
         self.consumer = TaskConsumer(
             self.parser,
             self.on_message,
             task_provider=RabbitMQTaskProvider(
-                connection=pika.BlockingConnection(
-                    pika.ConnectionParameters(
-                        host='localhost',
-                        port=5672,
-                        credentials=pika.PlainCredentials('guest', 'guest')
-                    )
-                )
+                self.channel,
+                rmq_config.queue
             )
         )
 
@@ -78,5 +96,14 @@ class SayHelloApplication:
 
 
 if __name__ == '__main__':
-    application = SayHelloApplication()
+    rmq_config = RMQConfig(
+        host='localhost',
+        port=5672,
+        user='guest',
+        password='guest',
+        queue='hello_queue'
+    )
+    application = SayHelloApplication(
+        rmq_config
+    )
     application.run()
