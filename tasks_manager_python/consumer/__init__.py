@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from dataclasses import asdict
 from logging import Handler, getLogger
 from typing import Any, Callable, Generic, TypeVar
-from tasks_manager_python.consumer.providers import TaskProvider
+from tasks_manager_python.consumer.providers import TaskProvider, TaskProviderData
 
 from tasks_manager_python.consumer.types import (TaskExecutionData,
                                                  TaskExecutionRawData)
@@ -12,6 +12,7 @@ from tasks_manager_python.repository.task_execution import \
     TaskExecutionLogRepository
 
 T = TypeVar('T')
+METADATATYPE = TypeVar('METADATATYPE')
 
 logger = getLogger(__name__)
 
@@ -44,12 +45,12 @@ class TaskPayloadParser(ABC, Generic[T]):
         raise NotImplementedError('Method parse() is not implemented')
 
 
-class TaskConsumer(Generic[T]):
+class TaskConsumer(Generic[T, METADATATYPE]):
 
     def __init__(self,
                  parser: TaskPayloadParser[T],
-                 callback: Callable[[TaskExecutionData[T]], Any],
-                 task_provider: TaskProvider = TaskProvider(),
+                 callback: Callable[[TaskExecutionData[T, METADATATYPE]], Any],
+                 task_provider: TaskProvider[METADATATYPE],
                  task_execution_repository: TaskExecutionLogRepository = TaskExecutionLogRepository(),
                  task_management_service: TaskManagementService = TaskManagementService()
 
@@ -70,14 +71,14 @@ class TaskConsumer(Generic[T]):
             except Exception as e:
                 logger.exception(f'Error while consuming messages: {e}', e)
 
-    def execute(self, data: bytes):
-
+    def execute(self, provider_data: TaskProviderData[METADATATYPE]) -> None:
+        bytes_data = provider_data.data
         try:
-            base_data = json.loads(data)
+            base_data = json.loads(bytes_data)
         except json.JSONDecodeError as err:
-            logger.exception(f'Failed to decode message: {data.decode()}', err)
+            logger.exception(f'Failed to decode message: {bytes_data.decode()}', err)
             self.task_management_service.register_task_base_decode_error(
-                data, err)
+                bytes_data, err)
             return
 
         try:
@@ -100,8 +101,10 @@ class TaskConsumer(Generic[T]):
 
         execution_data = TaskExecutionData(**{
             **asdict(task_execution_raw_data),
-            'payload': payload
+            'payload': payload,
+            'metadata': provider_data.metadata
         })
+
         self.logger_handler.set_execution_data(execution_data)
         try:
             self.callback(execution_data)
