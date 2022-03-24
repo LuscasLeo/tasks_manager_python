@@ -3,18 +3,45 @@ from abc import ABC, abstractmethod
 from dataclasses import asdict
 from logging import Handler, getLogger
 from typing import Any, Callable, Generic, TypeVar
-from tasks_manager_python.consumer.providers import TaskProvider, TaskProviderData
 
+from pydantic import ValidationError
+from tasks_manager_python.consumer.boradcasting.task_execution import (
+    TaskExecutionLogEmitter)
+from tasks_manager_python.consumer.providers import (TaskProvider,
+                                                     TaskProviderData)
 from tasks_manager_python.consumer.types import (TaskExecutionData,
                                                  TaskExecutionRawData)
 from tasks_manager_python.loggers import TaskExecutionLogHandler
-from tasks_manager_python.repository.task_execution import \
-    TaskExecutionLogRepository
 
 T = TypeVar('T')
 METADATATYPE = TypeVar('METADATATYPE')
 
 logger = getLogger(__name__)
+
+
+class TaskProcessingError(Exception, Generic[METADATATYPE]):
+    def __init__(self, raised_exception: Exception, task_provider_data: TaskProviderData[METADATATYPE]) -> None:
+        self.raised_exception = raised_exception
+        self.task_provider_data = task_provider_data
+        super().__init__()
+
+
+class TaskDecodeError(TaskProcessingError[METADATATYPE]):
+    def __init__(self, raised_exception: Exception, data: bytes, task_provider_data: TaskProviderData[METADATATYPE], ) -> None:
+        self.data = data
+        super().__init__(raised_exception, task_provider_data)
+
+
+class TaskParseError(TaskProcessingError[METADATATYPE]):
+    def __init__(self, raised_exception: Exception, data: dict, task_provider_data: TaskProviderData[METADATATYPE]) -> None:
+        self.data = data
+        super().__init__(raised_exception, task_provider_data)
+
+
+class TaskParsePayloadError(TaskProcessingError[METADATATYPE]):
+    def __init__(self, raised_exception: Exception, data: dict, task_provider_data: TaskProviderData[METADATATYPE]) -> None:
+        self.data = data
+        super().__init__(raised_exception, task_provider_data)
 
 
 class TaskManagementService:
@@ -29,7 +56,7 @@ class TaskManagementService:
 
     def register_task_payload_parse_error(self, raw_data: TaskExecutionRawData, err: Exception) -> None:
         logger.error(f'Error parsing task payload: {err}')
-        logger.error(f'Raw data: {asdict(raw_data)}')
+        logger.error(f'Raw data: {(raw_data.dict())}')
 
     def register_task_execution_error(self, task_execution_data: TaskExecutionData, err: Exception) -> None:
         logger.error(f'Error executing task: {err}')
@@ -50,41 +77,49 @@ class TaskConsumer(Generic[T, METADATATYPE]):
     def __init__(self,
                  parser: TaskPayloadParser[T],
                  callback: Callable[[TaskExecutionData[T, METADATATYPE]], Any],
+                 on_message_error: Callable[[Any], Any],
                  task_provider: TaskProvider[METADATATYPE],
-                 task_execution_repository: TaskExecutionLogRepository = TaskExecutionLogRepository(),
+                 task_execution_emitter: TaskExecutionLogEmitter,
                  task_management_service: TaskManagementService = TaskManagementService()
 
                  ):
         self.parser = parser
         self.callback = callback
+        self.on_message_error = on_message_error
         self.task_provider = task_provider
-        self.task_execution_repository = task_execution_repository
+        self.task_execution_emitter = task_execution_emitter
         self.task_management_service = task_management_service
+
         self.logger_handler = TaskExecutionLogHandler(
-            self.task_execution_repository)
+            self.task_execution_emitter)
 
     def consume_messages(self):
         while True:
-            try:
-                for data in self.task_provider.get_tasks():
-                    self.execute(data)
-            except Exception as e:
-                logger.exception(f'Error while consuming messages: {e}', e)
+            # try:
+            for data in self.task_provider.get_tasks():
+                self.execute(data)
+            # except Exception as e:
+            #     logger.exception(f'Error while consuming messages: {e}', e)
 
     def execute(self, provider_data: TaskProviderData[METADATATYPE]) -> None:
         bytes_data = provider_data.data
         try:
             base_data = json.loads(bytes_data)
         except json.JSONDecodeError as err:
-            logger.exception(f'Failed to decode message: {bytes_data.decode()}', err)
+            logger.exception(
+                f'Failed to decode message: {bytes_data.decode()}', err)
+            self.on_message_error(TaskDecodeError(
+                err, bytes_data, provider_data))
             self.task_management_service.register_task_base_decode_error(
                 bytes_data, err)
             return
 
         try:
             task_execution_raw_data = TaskExecutionRawData(**base_data)
-        except TypeError as err:
+        except ValidationError as err:
             logger.exception(f'Failed to parse message: {base_data}', err)
+            self.on_message_error(TaskParseError(
+                err, bytes_data, provider_data))
             self.task_management_service.register_task_base_parse_error(
                 base_data, err)
             return
@@ -93,14 +128,17 @@ class TaskConsumer(Generic[T, METADATATYPE]):
 
         try:
             payload = self.parser.parse(task_execution_raw_data.payload)
-        except Exception as e:
-            logger.exception('Error while parsing message: %s', e)
+        except Exception as err:
+            logger.exception('Error while parsing message payload: %s', err)
+            self.on_message_error(
+                TaskParsePayloadError(err, bytes_data, provider_data))
+
             self.task_management_service.register_task_payload_parse_error(
-                task_execution_raw_data, e)
+                task_execution_raw_data, err)
             return
 
         execution_data = TaskExecutionData(**{
-            **asdict(task_execution_raw_data),
+            **(task_execution_raw_data.dict()),
             'payload': payload,
             'metadata': provider_data.metadata
         })
@@ -112,14 +150,14 @@ class TaskConsumer(Generic[T, METADATATYPE]):
             self.task_management_service.register_task_execution_success(
                 execution_data)
 
-        except Exception as e:
+        except Exception as err:
             import traceback
             logger.exception(f'Error executing callback: %s\n%s',
-                             e, traceback.format_exc())
+                             err, traceback.format_exc())
             logger.error(traceback.format_exc())
 
             self.task_management_service.register_task_execution_error(
-                execution_data, e)
+                execution_data, err)
         finally:
             self.logger_handler.set_execution_data(None)
 

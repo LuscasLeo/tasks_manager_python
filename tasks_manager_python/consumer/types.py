@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from typing import Generic, TypeVar
+from pydantic import BaseModel
 
 
 T = TypeVar('T')
@@ -13,7 +14,6 @@ class TaskExecutionData(Generic[T, METADATATYPE]):
     metadata: METADATATYPE
 
 
-@dataclass
-class TaskExecutionRawData:
+class TaskExecutionRawData(BaseModel):
     task_execution_id: str
-    payload: bytes
+    payload: dict
