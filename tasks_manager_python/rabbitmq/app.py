@@ -1,10 +1,11 @@
 
 import logging
 from dataclasses import dataclass
-from logging import StreamHandler, getLogger
+from logging import Logger, StreamHandler, getLogger
 from typing import Callable, Generic, TypeVar
 
 import pika
+from pydantic import BaseModel
 from logging_utils import CustomFormatter
 from tasks_manager_python.consumer import (TaskConsumer, TaskDecodeError,
                                            TaskParseError,
@@ -19,8 +20,7 @@ from tasks_manager_python.rabbitmq import (RabbitMQTaskExecutionLogEmitter,
 T = TypeVar('T')
 
 
-@dataclass
-class RMQConfig:
+class RMQConfig(BaseModel):
     host: str
     port: int
     user: str
@@ -30,7 +30,7 @@ class RMQConfig:
 
 
 class BasicRabbitMQApplication(Generic[T]):
-    def __init__(self, rmq_config: RMQConfig, parser: TaskPayloadParser[T], callback: Callable[[TaskExecutionData[T, RabbitMQTaskMetadata]], None]):
+    def __init__(self, rmq_config: RMQConfig, parser: TaskPayloadParser[T], callback: Callable[[TaskExecutionData[T, RabbitMQTaskMetadata], Logger], None]):
         self.callback = callback
         self.parser = parser
         self.connection = pika.BlockingConnection(
@@ -81,7 +81,7 @@ class BasicRabbitMQApplication(Generic[T]):
         self.logger.setLevel(logging.DEBUG)
 
     def on_message(self, context: TaskExecutionData[T, RabbitMQTaskMetadata]):
-        self.callback(context)
+        self.callback(context, self.logger)
 
     def on_message_processing_error(self, error: TaskProcessingError[RabbitMQTaskMetadata]):
         if isinstance(error, TaskDecodeError):

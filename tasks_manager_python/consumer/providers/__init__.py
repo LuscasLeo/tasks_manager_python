@@ -1,14 +1,14 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 from time import sleep
 from typing import Generator, Generic, TypeVar
+
+from pydantic import BaseModel
 
 
 
 T = TypeVar('T')
 
-@dataclass
-class TaskProviderData(ABC, Generic[T]):
+class TaskProviderData(BaseModel, ABC, Generic[T]):
     data: bytes
     metadata: T
 class TaskProvider(ABC, Generic[T]):

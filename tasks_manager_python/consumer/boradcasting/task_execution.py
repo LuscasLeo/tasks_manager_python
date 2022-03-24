@@ -1,19 +1,19 @@
 
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 from datetime import datetime
 from logging import LogRecord
 from typing import Dict, List, Optional
 
+from pydantic import BaseModel
+
 from tasks_manager_python.consumer.types import TaskExecutionData
 
 
-@dataclass
-class TaskExecutionLogReport:
+class TaskExecutionLogReport(BaseModel):
     level: str
     message: str
-    execution_data: TaskExecutionData
+    execution_data: Optional[TaskExecutionData]
     date_created: datetime
     date_registered: datetime
     args: str
@@ -29,8 +29,9 @@ class TaskExecutionLogEmitter(ABC):
         """
         raise NotImplementedError('TaskExecutionLogEmitter.emit')
 
+
 class InMemoryTaskExecutionLogEmitter(TaskExecutionLogEmitter):
-    
+
     __logs: Dict[str, List[TaskExecutionLogReport]] = {}
     """
         Dictionary of logs by task_execution_id
@@ -57,7 +58,6 @@ class InMemoryTaskExecutionLogEmitter(TaskExecutionLogEmitter):
                     stack_trace=log.stack_info
                 )
             )
-
 
     def get_logs(self, task_execution_id: str) -> List[TaskExecutionLogReport]:
         """

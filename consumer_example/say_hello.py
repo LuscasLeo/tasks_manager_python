@@ -1,4 +1,4 @@
-from logging import getLogger
+from logging import StreamHandler, getLogger
 from typing import List
 
 from pydantic import BaseModel
@@ -7,7 +7,7 @@ from tasks_manager_python.rabbitmq.app import (BasicRabbitMQApplication,
                                                RMQConfig)
 
 logger = getLogger(__name__)
-
+logger.addHandler(StreamHandler())
 
 class Hobbie(BaseModel):
     name: str
@@ -36,8 +36,12 @@ if __name__ == '__main__':
     application = BasicRabbitMQApplication(
         rmq_config=rmq_config,
         parser=SayHelloParser(),
-        callback=lambda task_execution_data: logger.info(
+        callback=lambda task_execution_data, logger: logger.info(
             f'Task execution data: {task_execution_data}')
+    ) 
+
+    logger.addHandler(
+        application.consumer.get_logger_handler()
     )
 
     application.run()

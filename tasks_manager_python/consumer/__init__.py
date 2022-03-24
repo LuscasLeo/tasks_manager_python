@@ -1,6 +1,5 @@
 import json
 from abc import ABC, abstractmethod
-from dataclasses import asdict
 from logging import Handler, getLogger
 from typing import Any, Callable, Generic, TypeVar
 
@@ -60,10 +59,10 @@ class TaskManagementService:
 
     def register_task_execution_error(self, task_execution_data: TaskExecutionData, err: Exception) -> None:
         logger.error(f'Error executing task: {err}')
-        logger.error(f'Task execution data: {asdict(task_execution_data)}')
+        logger.error(f'Task execution data: {(task_execution_data.dict())}')
 
     def register_task_execution_success(self, task_execution_data: TaskExecutionData) -> None:
-        logger.info(f'Task execution success: {asdict(task_execution_data)}')
+        logger.info(f'Task execution success: {(task_execution_data.dict())}')
 
 
 class TaskPayloadParser(ABC, Generic[T]):

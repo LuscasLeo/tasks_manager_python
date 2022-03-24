@@ -1,11 +1,10 @@
 import json
-from dataclasses import asdict, dataclass
-from itertools import starmap
 from logging import LogRecord
 from typing import Generator
 
 import pika
 from pika.adapters.blocking_connection import BlockingChannel
+from pydantic import BaseModel
 from tasks_manager_python.consumer.boradcasting.task_execution import (
     TaskExecutionLogEmitter, TaskExecutionLogReport)
 from tasks_manager_python.consumer.providers import (TaskProvider,
@@ -13,8 +12,7 @@ from tasks_manager_python.consumer.providers import (TaskProvider,
 from tasks_manager_python.consumer.types import TaskExecutionData
 
 
-@dataclass
-class RabbitMQTaskMetadata:
+class RabbitMQTaskMetadata(BaseModel):
     delivery_tag: int
     routing_key: str
     exchange: str
@@ -52,7 +50,7 @@ class RabbitMQTaskExecutionLogEmitter(TaskExecutionLogEmitter):
             exchange='',
             routing_key=self.queue_name,
             body=json.dumps(
-                asdict(TaskExecutionLogReport(
+                TaskExecutionLogReport(
                     args=str(log.args),
                     level=log.levelname,
                     message=log.getMessage(),
@@ -60,7 +58,8 @@ class RabbitMQTaskExecutionLogEmitter(TaskExecutionLogEmitter):
                     date_created=log.created,
                     date_registered=log.created,
                     stack_trace=log.exc_text,
-                ))
+                ).dict(),
+                default=str
             ),
             properties=pika.BasicProperties(
                 delivery_mode=2,
