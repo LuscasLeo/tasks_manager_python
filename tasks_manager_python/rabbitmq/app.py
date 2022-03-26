@@ -6,7 +6,7 @@ from typing import Callable, Generic, TypeVar
 
 import pika
 from pydantic import BaseModel
-from logging_utils import CustomFormatter
+from tasks_manager_python.logging_utils import CustomFormatter
 from tasks_manager_python.consumer import (TaskConsumer, TaskDecodeError,
                                            TaskParseError,
                                            TaskParsePayloadError,
