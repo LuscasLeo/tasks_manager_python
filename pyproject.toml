@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "tasks_manager_python"
-version = "0.0.0"
+version = "0.1.0"
 description = "A Task Management Service for Mutiple Kinds of Scripts"
 authors = ["Lucas Silva"]
 
