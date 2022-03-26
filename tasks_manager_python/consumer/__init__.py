@@ -93,12 +93,11 @@ class TaskConsumer(Generic[T, METADATATYPE]):
             self.task_execution_emitter)
 
     def consume_messages(self):
-        while True:
-            # try:
-            for data in self.task_provider.get_tasks():
-                self.execute(data)
-            # except Exception as e:
-            #     logger.exception(f'Error while consuming messages: {e}', e)
+    # try:
+        for data in self.task_provider.get_tasks():
+            self.execute(data)
+    # except Exception as e:
+    #     logger.exception(f'Error while consuming messages: {e}', e)
 
     def execute(self, provider_data: TaskProviderData[METADATATYPE]) -> None:
         bytes_data = provider_data.data
